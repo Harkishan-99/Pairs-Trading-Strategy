@@ -4,6 +4,7 @@ __author__ = 'saeedamen'
 A basic fixed beta trading strategy.
 """
 import os
+import sys
 import json
 import logging
 import pandas as pd
@@ -23,7 +24,7 @@ api = client.api()
 class PairsTrader:
 
     def __init__(self, X:str, Y:str, thresholds:list, lookback_window:int,
-                 base_qty:int, timeframe:str='1D'):
+                 base_amount:int, timeframe:str='1D'):
         """
         Pairs trader initialization.
         """
@@ -35,7 +36,7 @@ class PairsTrader:
         self.short_entry = thresholds[1][0]
         self.short_exit = thresholds[1][1]
         self.window = lookback_window
-        self.base_qty = base_qty
+        self.base_qty = base_amount/2
         self.open_positions = False
         self.open_order = None
         self.timeframe = timeframe
@@ -49,18 +50,15 @@ class PairsTrader:
         df = res.df[asset]
         return df['close']
 
-    def check_criteria(self, X:pd.Series, Y:pd.Series)->(bool, pd.Series, float):
-        return _partial_criteria(X, Y)
-
     def OMS(self, asset:str, qty:float)->None:
         if qty != 0:
             if qty > 0:
                 side = 'buy'
             else:
                 side = 'sell'
-
+            QTY = abs(qty)
             resp = api.submit_order(symbol=asset,
-                                    qty=abs(qty),
+                                    qty=QTY,
                                     side=side)
             self.order_log(resp)
         else:
@@ -71,39 +69,98 @@ class PairsTrader:
             except Exception as e:
                 logging.exception(e)
 
+    def get_ltp(self, asset:str):
+        return api.get_last_trade(asset).price
+
+    def place_order(self, beta:float, type:str='exit'):
+        if type == 'long':
+            Y_qty = int(self.get_ltp(self.Y)/self.base_qty)
+            X_qty = int(self.get_ltp(self.X)*beta/self.base_qty)
+            self.OMS(self.Y, Y_qty)
+            self.OMS(self.X, -1*X_qty)
+        elif type == 'short':
+            Y_qty = int(self.get_ltp(self.Y)/self.base_qty)
+            X_qty = int(self.get_ltp(self.X)*beta/self.base_qty)
+            self.OMS(self.Y, -1*Y_qty)
+            self.OMS(self.X, X_qty)
+        elif type == 'exit':
+            self.OMS(self.Y, 0)
+            self.OMS(self.X, 0)
+
     def run(self)->None:
         #get the historical data for X and Y pair
         X = self.get_price_data(self.X, self.window)
         Y = self.get_price_data(self.Y, self.window)
         #check if it holds the criteria.
-        passed, spread, beta = check_criteria(X, Y)
+        passed, spread, beta = _partial_criteria(X, Y)
         #get the spreads z-score
         zscore = get_zscore(spread)
         if passed:
-            #check if any entry position is triggered
-            if zscore[-1] < self.long_entry:
-                #BUY the spread (BUY Y SELL X)
-                self.OMS(self.Y, 1)
-                self.OMS(self.X, -1*beta)
-                self.open_positions = 1
-            elif zscore[-1] > self.short_entry:
-                #SELL the spread
-                #BUY the spread (BUY Y SELL X)
-                self.OMS(self.Y, -1)
-                self.OMS(self.X, 1*beta)
-                self.open_positions = -1
+            if not self.open_positions:
+                #check if any entry position is triggered
+                if zscore[-1] < self.long_entry:
+                    #LONG the spread (BUY Y SELL X)
+                    self.place_order(beta, type='long')
+                    self.open_positions = 1
 
-            if self.open_positions:
+                elif zscore[-1] > self.short_entry:
+                    #SELL the spread
+                    self.place_order(beta, type='short')
+                    self.open_positions = -1
+
+            else :
                 #check if any exit position is triggered only
                 #in case of on going position
                 if (zscore[-1] < self.short_exit and self.open_positions < 0) or\
                    (zscore[-1] > self.long_exit and self.open_positions > 0):
                     #close the spread postion
-                    self.OMS(self.Y, 0)
-                    self.OMS(self.X, 0)
+                    self.place_order(beta, type='exit')
                     self.open_positions = False
         else:
             if self.open_positions:
-                self.OMS(self.Y, 0)
-                self.OMS(self.X, 0)
+                self.place_order(None, type='exit')
                 self.open_positions = False
+
+            logging.info("The pair is no longer statisfying the criteria's")
+            sys.exit()
+
+def get_sleep_value(timeframe:str):
+    value, base = timeframe[:-1], timeframe[-1]
+    if base.upper() == 'D':
+        #daily
+        return value*86400
+    elif base.upper() == 'H':
+        #hourly
+        return value*3600
+    elif base.upper() == 'M':
+        #hourly
+        return value*60
+    else:
+        raise ValueError("Timeframe not supported")
+
+if __name__ == "__main__":
+    clock = api.get_clock()
+
+    #check if market is open
+    if clock.is_open:
+        pass
+    else:
+        time_to_open = clock.next_open - clock.timestamp
+        print(
+            f"Market is closed now going to sleep for {time_to_open.total_seconds()//60} minutes")
+        time.sleep(time_to_open.total_seconds())
+
+    #start a strategy instance
+    X = 'KEY'
+    Y = 'HBAN'
+    thresholds = [(-1.5, 0), (1.5, 0)]
+    lookback_window = 120 #last 6 months
+    base_amount = 1000 #$
+    timeframe = '1D'
+
+    trader = PairsTrader(X, Y, thresholds, lookback_window, base_amount, timeframe)
+    bar_time = get_sleep_value(timeframe)
+    while True:
+        trader.run()
+        #sleep till next bar
+        time.sleep(bar_time)
