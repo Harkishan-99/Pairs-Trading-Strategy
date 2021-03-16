@@ -1,12 +1,14 @@
-__author__ = 'saeedamen'
+__author__ = 'harkishansinghbaniya'
 
 """
 A basic fixed beta trading strategy.
 """
 import os
 import sys
+import time
 import json
 import logging
+import datetime
 import pandas as pd
 
 from utils import _partial_criteria, get_zscore
@@ -93,9 +95,10 @@ class PairsTrader:
         Y = self.get_price_data(self.Y, self.window)
         #check if it holds the criteria.
         passed, spread, beta = _partial_criteria(X, Y)
-        #get the spreads z-score
-        zscore = get_zscore(spread)
+
         if passed:
+            #get the spreads z-score
+            zscore = get_zscore(spread)
             if not self.open_positions:
                 #check if any entry position is triggered
                 if zscore[-1] < self.long_entry:
@@ -107,6 +110,8 @@ class PairsTrader:
                     #SELL the spread
                     self.place_order(beta, type='short')
                     self.open_positions = -1
+                else:
+                    print(f"{datetime.datetime.now()} No signal found !")
 
             else :
                 #check if any exit position is triggered only
@@ -120,7 +125,7 @@ class PairsTrader:
             if self.open_positions:
                 self.place_order(None, type='exit')
                 self.open_positions = False
-
+            print("The pair is no longer statisfying the criteria's")
             logging.info("The pair is no longer statisfying the criteria's")
             sys.exit()
 
@@ -147,18 +152,20 @@ if __name__ == "__main__":
     else:
         time_to_open = clock.next_open - clock.timestamp
         print(
-            f"Market is closed now going to sleep for {time_to_open.total_seconds()//60} minutes")
+            f"Market is closed now going to sleep for \
+            {time_to_open.total_seconds()//60} minutes")
         time.sleep(time_to_open.total_seconds())
 
     #start a strategy instance
     X = 'KEY'
     Y = 'HBAN'
     thresholds = [(-1.5, 0), (1.5, 0)]
-    lookback_window = 120 #last 6 months
+    lookback_window = 252 #last 6 months
     base_amount = 1000 #$
     timeframe = '1D'
 
-    trader = PairsTrader(X, Y, thresholds, lookback_window, base_amount, timeframe)
+    trader = PairsTrader(X, Y, thresholds, lookback_window,
+                         base_amount, timeframe)
     bar_time = get_sleep_value(timeframe)
     while True:
         trader.run()
