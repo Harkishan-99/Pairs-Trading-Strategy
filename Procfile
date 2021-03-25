@@ -1,1 +1,1 @@
-web: python strategy.py
+worker: python strategy.py
