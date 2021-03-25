@@ -169,5 +169,6 @@ if __name__ == "__main__":
     bar_time = get_sleep_value(timeframe)
     while True:
         trader.run()
+        print("No signal goin to sleep")
         #sleep till next bar
         time.sleep(bar_time)
