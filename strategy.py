@@ -157,8 +157,8 @@ if __name__ == "__main__":
         time.sleep(time_to_open.total_seconds())
 
     #start a strategy instance
-    X = 'KEY'
-    Y = 'HBAN'
+    X = 'AZO'
+    Y = 'AAP'
     thresholds = [(-1.5, 0), (1.5, 0)]
     lookback_window = 252 #last 6 months
     base_amount = 1000 #$

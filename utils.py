@@ -102,21 +102,33 @@ def _apply_full_criteria(X, Y, p_value_threshold=0.05, min_half_life=1, max_half
                                 return (result, criteria_name)
     return (None, criteria_name)
 
+# def _partial_criteria(X, Y, p_value_threshold=0.05):
+#     stats_X = check_for_stationarity(X.values)
+#     stats_Y = check_for_stationarity(Y.values)
+#     if stats_X['p_value'] > p_value_threshold and \
+#        stats_Y['p_value'] > p_value_threshold:
+#         x = X.values
+#         y = Y.values
+#         x_ = sm.add_constant(x)
+#         results = sm.OLS(y, x_).fit()
+#         b = results.params[1]
+#         if b > 0:
+#             spread = Y - b * X
+#             stats = check_coint(X, Y)
+#
+#             if stats['p_value'] <= p_value_threshold:
+#                 hurst_exponent = find_hurst_exp(spread.values)
+#                 if hurst_exponent < 0.5:
+#                     return True, spread, b
+#     return False, None, None
+
 def _partial_criteria(X, Y, p_value_threshold=0.05):
-    stats_X = check_for_stationarity(X.values)
-    stats_Y = check_for_stationarity(Y.values)
-    if stats_X['p_value'] > p_value_threshold and \
-        stats_Y['p_value'] > p_value_threshold:
-        x = X.values
-        y = Y.values
-        x_ = sm.add_constant(x)
-        results = sm.OLS(y, x_).fit()
-        b = results.params[1]
-        if b > 0:
-            spread = Y - b * X
-            stats = check_coint(X, Y)
-            if stats['p_value'] <= p_value_threshold:
-                hurst_exponent = find_hurst_exp(spread.values)
-                if hurst_exponent < 0.5:
-                    return True, spread, b
+    x = X.values
+    y = Y.values
+    x_ = sm.add_constant(x)
+    results = sm.OLS(y, x_).fit()
+    b = results.params[1]
+    if b > 0:
+        spread = Y - b * X
+        return True, spread, b
     return False, None, None
